@@ -17,7 +17,7 @@ import argparse
 import os
 import sys
 import networkx as nx
-import matplotlib
+
 from operator import itemgetter
 import random
 random.seed(9001)
@@ -67,6 +67,7 @@ def get_arguments():
 
 
 def read_fastq(fastq_file):
+	' this function allows us to open the fna file and read it' 
 	nucle=['A', 'T', 'C','G']
 	with open (fastq_file, 'rt') as handle:
 		for i in handle:
@@ -77,11 +78,13 @@ def read_fastq(fastq_file):
 				
 				
 def cut_kmer(read, kmer_size):
+	'this function allows us to divide the read according to the number of kmer'
 	for start in range(0,len(read)-(kmer_size-1),1):
 		km= read[start:start+kmer_size]    
 		yield km
 	
 def build_kmer_dict(fastq_file, kmer_size):
+	'this function allows us to create a dictionary according to the number of occurrences of kmer'
 	kmer_dic={}
 	for i in read_fastq(fastq_file) :
 		for kmer in cut_kmer(i, kmer_size):
@@ -92,31 +95,41 @@ def build_kmer_dict(fastq_file, kmer_size):
 	return kmer_dic	
 
 def build_graph(kmer_dict):
+	'this function allows us to create a graph'
 	G = nx.DiGraph()
 	for kmer in kmer_dict:
     		G.add_edge(kmer[:-1],kmer[1:], weight=kmer_dict[kmer]) 
 	return G
 
 def remove_paths(graph, path_list, delete_entry_node, delete_sink_node):
-    for path in path_list:
-        graph.remove_nodes_from(path[(not delete_entry_node):(None if delete_sink_node else -1)])
-    return graph
+	'this function allows us to remove certain path from the graph '
+	for path in path_list:
+		graph.remove_nodes_from(path[(not delete_entry_node):(None if delete_sink_node else -1)])
+	return graph
 
 
 def std(data):
-    std=round(statistics.stdev(data),1)
-    return std
+ 	'this function allows us to calculate the variance'
+	if (len(data)>1):
+    		std=round(statistics.stdev(data),1)
+	else : std=0
+	return std
 
 def path_average_weight(graph, path):
-    list_weight=[]
-    for i in graph.subgraph(path).edges(data=True):
-	    d=i[2]
-	    list_weight.append(d['weight'])
-    wm =statistics.mean(list_weight)
-    return wm
+	'this function allows us to calculate the average weight of the paths'
+	list_weight=[]
+	for i in graph.subgraph(path).edges(data=True):
+		d=i[2]
+		list_weight.append(d['weight'])
+	if (len(list_weight)>1):	
+		wm =statistics.mean(list_weight)
+	else : 
+		wm=0 
+	return wm
 
 def select_best_path(graph, path_list, path_length, weight_avg_list, 
                      delete_entry_node=False, delete_sink_node=False):
+	'this function allows us to find the best path'
 	std_weight=std(weight_avg_list)
 	if std_weight == 0:
 		std_value=std(path_length)
@@ -132,6 +145,7 @@ def select_best_path(graph, path_list, path_length, weight_avg_list,
 
 
 def solve_bubble(graph, ancestor_node, descendant_node):
+	'this function allows us to have a clean graph of the bubble located between these two nodes by using the functions previously developed'
     path_list=nx.all_simple_paths(graph,ancestor_node,descendant_node)
     path_list2=[]
     path_length=[]
@@ -144,6 +158,7 @@ def solve_bubble(graph, ancestor_node, descendant_node):
     return graph1
 
 def simplify_bubbles(graph):
+	'this function allows us to return a graph without bubble'
     start= get_starting_nodes(graph)
     end= get_sink_nodes(graph)
     for ancestor in start:
@@ -161,6 +176,7 @@ def simplify_bubbles(graph):
     return graph
 
 def solve_entry_tips(graph, starting_nodes):
+	'this function allows us to take a graph and a list of input nodes and return graph with no unwanted input path'
     graph = simplify_bubbles(graph)
     tips = []
     for start in starting_nodes:
@@ -183,28 +199,31 @@ def solve_entry_tips(graph, starting_nodes):
     return graph
 
 def solve_out_tips(graph, ending_nodes):
-    graph = simplify_bubbles(graph)
-    tips = []
-    for end in ending_nodes:
-        path = [end]
-        successors = list(graph.successors(end))
-        predecessors = list(graph.predecessors(end))
-        while len(successors) < 2 and len(predecessors) < 2 and predecessors:
-            end = predecessors[0]
-            path.append(end)
-            successors = list(graph.successors(end))
-            predecessors = list(graph.predecessors(end))
-        tips.append(path[::-1])
-    path_lengths=[]
-    avg_path_weights=[]
-    for path in tips:
-        path_lengths.append(len(path))
-        avg_path_weights.append(path_average_weight(graph, path))
-    graph = select_best_path(graph, tips, path_lengths, avg_path_weights,
-                             delete_sink_node=True)
-    return graph
+	'this function allows us to take a graph and a list of output nodes and return graph with no unwanted output path'
+	graph = simplify_bubbles(graph)
+	tips = []
+	for end in ending_nodes:
+        	path = [end]
+        	successors = list(graph.successors(end))
+        	predecessors = list(graph.predecessors(end))
+        	while len(successors) < 2 and len(predecessors) < 2 and predecessors:
+           		end = predecessors[0]
+           		path.append(end)
+           		successors = list(graph.successors(end))
+           		predecessors = list(graph.predecessors(end))
+       		tips.append(path[::-1])
+	path_lengths=[]
+	avg_path_weights=[]
+	for path in tips:
+		path_lengths.append(len(path))
+		if (path_average_weight(graph, path) !=0):
+			avg_path_weights.append(path_average_weight(graph, path))
+		else : avg_path_weignts.append(0)
+	graph = select_best_path(graph, tips, path_lengths, avg_path_weights, delete_sink_node=True)
+	return graph
 
 def get_starting_nodes(graph):
+	'this function allows us to have the list of input nodes'
 	list_start=[]
 	for i in graph.nodes:
 		nodepre=list(graph.predecessors(i))
@@ -213,6 +232,7 @@ def get_starting_nodes(graph):
 	return list_start
 	
 def get_sink_nodes(graph):
+	'this function allows us to have the list of output nodes'
 	list_sortie=[]
 	for i in graph.nodes:
 		nodesuc=list(graph.successors(i))
@@ -221,6 +241,7 @@ def get_sink_nodes(graph):
 	return list_sortie
 
 def get_contigs(graph, starting_nodes, ending_nodes):
+	'this function allows us to have the contigs'
 	tub=[]
 	for start in starting_nodes:
 		for end in ending_nodes:
@@ -236,6 +257,7 @@ def get_contigs(graph, starting_nodes, ending_nodes):
 	return tub			
 			
 def save_contigs(contigs_list, output_file):
+	'this function allows us to save the created graph'
     with open (output_file, 'w') as fileout:
     	for i in range(0,len(contigs_list)):
     		fileout.write(">contig_"+str(i)+ " len=" + str(contigs_list[i][1]) +'\n'+ fill(contigs_list[i][0]) +'\n')
@@ -293,8 +315,7 @@ def main():
     start=get_starting_nodes(graph)
     end=get_sink_nodes(graph)
     path= get_contigs(graph,start, end)
-    save_contigs(path, './res/resultat1.fasta')
-
+    save_contigs(path, 'resultat1.fasta')
 
     print('graph tip resolution')
     print('before')
